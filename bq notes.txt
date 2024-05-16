@@ -1,0 +1,320 @@
+How many questions each tag has?
+Can a question belong to multiple tags?
+
+SELECT tag,count(id) c FROM `jrjames83-1171.sampledata.top_questions` group by tag order by c desc
+--19852
+
+select distinct id from `jrjames83-1171.sampledata.top_questions` 
+--506055
+
+select count(*) from `jrjames83-1171.sampledata.top_questions` 
+--6623581
+
+SELECT tag,count(distinct id) c FROM `jrjames83-1171.sampledata.top_questions` group by tag order by c desc
+
+========================SCHEMA OF TABLE============================================
+
+===================================================================================
+-- Does a question have multiple tags?
+
+-- select title,id, array_agg(distinct tag) from `jrjames83-1171.sampledata.top_questions` group by title,id 
+
+-- Find questions with more than 2 distinct tags
+
+select title,id, array_agg(distinct tag) as count_of_distinct_tags from `jrjames83-1171.sampledata.top_questions` 
+where tag like '%python' group by title,id having array_length(count_of_distinct_tags) > 2 
+
+select title,id, count(distinct tag) as count_of_distinct_tags from `jrjames83-1171.sampledata.top_questions` group by title,id having count_of_distinct_tags > 2 order by 3 desc
+
+====================================================================================================================================
+-- for each tag get me all questions associated with them
+-- which tag has the most questions
+-- whats the average no of questions per tag
+-- which tags have > the average number of questions
+
+
+Case:CAS-3297646-B7D7G3
+ Dear Applicant
+
+Thank you for writing to the U.S. Visa Service Desk.
+
+We understand that you have a query regarding profile modification.
+
+In response to your question, we would request you to please call our help desk and they will assist you further.
+
+Please follow the link: https://www.ustraveldocs.com/in/en/contact-us for contact details of U.S. Visa service helpdesk.
+
+We hope this information is helpful to you.
+
+Sincerely,
+U.S. Visa Service Desk.
+
+
+Case:CAS-3330513-X6N3Q1
+
+
+====================
+-- for each tag get me all questions associated with them
+-- SELECT tag,array_agg(distinct id) as ids FROM `jrjames83-1171.sampledata.top_questions`
+-- group by tag order by tag
+
+-- which tag has the most questions
+-- select tag,array_agg(distinct id) as ids from `jrjames83-1171.sampledata.top_questions`
+-- group by tag order by array_length(ids) desc
+
+-- whats the average no of questions per tag
+with base_table as(
+select tag,count(distinct id) as ids from `jrjames83-1171.sampledata.top_questions`
+group by tag)
+select avg(ids) from base_table
+
+-- which tags have > the average number of questions
+with base_table as(
+select tag,count(distinct id) as ids from `jrjames83-1171.sampledata.top_questions`
+group by tag)
+select tag from base_table where ids > (select avg(ids) from base_table)
+
+-- select count(distinct id) from `jrjames83-1171.sampledata.top_questions`
+--6623581, 506055
+
+==================================================================================
+YoY growth of each language,per year
+--YoY growth of language for each year
+with base_table as(
+  select distinct
+  case when title like "%python%" then "python"
+  when title like "%javascript%" then "javascript"
+  when title like "%sql%" then "sql"
+  when title like "%ruby%" then "ruby"
+  end as language,id,quarter,quarter_views
+  from `jrjames83-1171.sampledata.top_questions`
+), summary_table as(
+select language,extract(year from quarter) as year,sum(quarter_views) as views from base_table
+where language is not null
+group by 1,2
+order by 1,2)
+select st.*,round(((views/LAG(views) over (partition by language order by year))-1)*100,2) as perc_change from summary_table as st;
+
+================================================================================
+
+joins - inner join,left/right join,full outer join
+* customers table and orders table
+* What customer city is responsible for most orders
+
+1st way -
+select count(o.order_id) as orders,c.customer_city as city from `jrjames83-1171.sampledata.customers` c
+inner join `jrjames83-1171.sampledata.orders` o
+on o.customer_id=c.customer_id
+group by city
+order by 1 desc;
+
+2nd way -
+select customer_city,count(*) as nbr_rows from `jrjames83-1171.sampledata.customers` c
+inner join `jrjames83-1171.sampledata.orders` o
+on o.customer_id=c.customer_id
+group by 1 order by 2 desc;
+
+* have any customers placed more than one order if we use unique_customer_id?
+1 way -
+select customer_unique_id,count(*) as nbr_orders from `jrjames83-1171.sampledata.customers` c
+inner join `jrjames83-1171.sampledata.orders` o
+on o.customer_id=c.customer_id
+group by 1 order by 2 desc;
+
+2nd way-
+select customer_unique_id,o.order_purchase_timestamp,row_number() over (partition by customer_unique_id
+order by o.order_purchase_timestamp) as row_nums from `jrjames83-1171.sampledata.customers` c
+inner join `jrjames83-1171.sampledata.orders` o
+on o.customer_id=c.customer_id
+order by 3 desc;
+
+
+* how many customers were acquired each month and year
+-- SELECT count(customer_id) as count_of_customers,extract( year from order_purchase_timestamp) as year,extract( month from order_purchase_timestamp) as month FROM `jrjames83-1171.sampledata.orders` group by 2,3 order by 1 desc;
+
+--* how many customers were acquired each month and year 
+with customers_rank as (
+select customer_unique_id,order_purchase_timestamp,row_number() over (partition by customer_unique_id order by order_purchase_timestamp) as row_num
+  from `jrjames83-1171.sampledata.customers` c
+  join `jrjames83-1171.sampledata.orders` o
+  on c.customer_id=o.customer_id
+  order by 1,2
+
+) 
+select extract(year from order_purchase_timestamp) as year,
+  extract(month from order_purchase_timestamp) as month,
+  count(*) as nbr_customers from customers_rank 
+  group by 1,2
+  order by 1,2;
+
+  --how can we filter the tables for customers whose customer_order_number max is> 1
+with customers_rank as (
+select customer_unique_id,order_purchase_timestamp,row_number() over (partition by customer_unique_id order by order_purchase_timestamp) as row_num
+  from `jrjames83-1171.sampledata.customers` c
+  join `jrjames83-1171.sampledata.orders` o
+  on c.customer_id=o.customer_id
+  order by 1,2
+) ,exclude_these as (
+  select customer_unique_id,max(row_num) 
+  from customers_rank 
+  group by 1
+  having max(row_num)=1
+  order by 1
+)
+select * from customers_rank where customer_unique_id not in(select customer_unique_id from exclude_these)
+order by 1,2;
+
+--we want to find order the instances of people purchasing product by time
+--eg- for some product,when was the nth time it was purchased
+SELECT product_id,order_purchase_timestamp,row_number() over(partition by product_id order by order_purchase_timestamp) as nth_occurance FROM `jrjames83-1171.sampledata.orders` o 
+join `jrjames83-1171.sampledata.order_items` oi on o.order_id=oi.order_id;
+
+--Find the time in-between orders of the product
+with base_table as (
+SELECT oi.product_id,o.order_purchase_timestamp,
+  row_number() over(partition by oi.product_id order by order_purchase_timestamp) as nth_occurance,
+  LAG(order_purchase_timestamp) over (partition by oi.product_id order by order_purchase_timestamp) as prev_timestamp ,p.product_category_name
+  FROM `jrjames83-1171.sampledata.orders` o 
+  join `jrjames83-1171.sampledata.order_items` oi on o.order_id=oi.order_id
+  join `jrjames83-1171.sampledata.products` p on p.product_id=oi.product_id)
+  
+  select bt.*,date_diff(date(order_purchase_timestamp),date(prev_timestamp),DAY) as time_in_between_orders from base_table bt;
+  
+
+--find the avg days between orders for any product
+  with base_table as (
+SELECT oi.order_id,oi.product_id,o.order_purchase_timestamp,
+  row_number() over(partition by oi.product_id order by order_purchase_timestamp) as nth_occurance,
+  LAG(order_purchase_timestamp) over (partition by oi.product_id order by order_purchase_timestamp) as prev_timestamp ,p.product_category_name
+  FROM `jrjames83-1171.sampledata.orders` o 
+  join `jrjames83-1171.sampledata.order_items` oi on o.order_id=oi.order_id
+  join `jrjames83-1171.sampledata.products` p on p.product_id=oi.product_id)
+,days_table as(
+  select bt.*,date_diff(date(order_purchase_timestamp),date(prev_timestamp),DAY) as time_in_between_orders from base_table bt)
+  select d.product_id,avg(time_in_between_orders) as avg_days_of_order from days_table as d group by 1;
+  
+-- customer with > 1 orders, Avg time between orders
+with base_table as(
+select c.customer_unique_id,o.order_purchase_timestamp,
+row_number() over (partition by c.customer_unique_id order by o.order_purchase_timestamp) as nbr_customers
+from `jrjames83-1171.sampledata.orders` o
+join `jrjames83-1171.sampledata.customers` c
+on o.customer_id=c.customer_id
+order by 1,2),exclude_these as(
+select bt.customer_unique_id,max(nbr_customers) from base_table as bt
+group by 1
+having max(nbr_customers)=1),
+customer_order as(
+select * from base_table bt where bt.customer_unique_id not in(select customer_unique_id from exclude_these))
+, lag_table as(select *,
+LAG(order_purchase_timestamp) over (partition by customer_unique_id order by order_purchase_timestamp) as prev_time from customer_order as co), date_diff_table as(
+select *,date_diff(date(order_purchase_timestamp),date(prev_time),DAY) as time_diffs from lag_table where prev_time is not null)
+select nbr_customers,count(distinct customer_unique_id) customers,avg(time_diffs) as avg_time from date_diff_table group by 1 order by 1;
+
+--full outer join examples
+with took_offer as(
+  select 1 as customer_id,34.99 as spend union all
+  select 2, 21.99 union all
+  select 3, 33.00 union all
+  select 4, 34.9 union all
+  select 5,9.00
+),loyalty_club as(
+  select 3 as customer_id,1 as status union all
+  select 4,2 union all
+  select 8,3 union all
+  select 12,4 union all
+  select 10,5
+), base_table as( select t.customer_id as customer_id,t.spend,l.customer_id as loyalty_customer_id,l.status from took_offer t 
+full outer join loyalty_club l
+on t.customer_id=l.customer_id),select_criteria as(
+select *,
+  case
+    when base_table.customer_id is null and base_table.loyalty_customer_id is not null then 'loyalty_customer_not_spend'
+    when base_table.customer_id is not null and base_table.loyalty_customer_id is null then 'customer_not_loyalty'
+    when base_table.customer_id is not null and base_table.loyalty_customer_id is not null then 'customer_loyalty'
+    end as st
+     from base_table)
+select * from select_criteria where st='customer_not_loyalty';
+
+=============================================================================================
+--revenue trends by hour
+select extract(hour from o.order_purchase_timestamp) as hour,round(sum(op.payment_value),2) as revenue_per_hour,
+sum(sum(payment_value)) over() as total_revenue from `jrjames83-1171.sampledata.orders` o
+join `jrjames83-1171.sampledata.order_payments` op
+on o.order_id=op.order_id
+group by 1
+order by 1;
+
+
+--revenue trends by time of day,morning,evening,afternoon
+with base_table as(
+select extract(hour from o.order_purchase_timestamp) as hour,
+round(sum(op.payment_value),2) as revenue_per_hour,
+sum(sum(payment_value)) over() as total_revenue 
+from `jrjames83-1171.sampledata.orders` o
+join `jrjames83-1171.sampledata.order_payments` op
+on o.order_id=op.order_id
+group by 1
+order by 1)
+select
+  case
+    when hour between 0 and 5 or hour=23 then 'overnight'
+    when hour between 6 and 11 then 'morning'
+    when hour between 12 and 16 then 'afternoon'
+    when hour between 17 and 22 then 'evening'
+    else 'check_my_logic'
+  end as day_times,round(sum(revenue_per_hour),2) as revenue
+from base_table
+group by 1;
+
+--conditional outputs using small case statements,create columns
+
+with base_table as(
+select extract(hour from o.order_purchase_timestamp) as hour,
+round(sum(payment_value),2) as revenue_per_hour
+from `jrjames83-1171.sampledata.orders` o join
+`jrjames83-1171.sampledata.order_payments` p
+on o.order_id=p.order_id
+group by 1)
+select 
+sum(case when hour between 0 and 5 or hour=23 then revenue_per_hour else 0 end) as overnight_sales,
+sum(case when hour between 6 and 11 then revenue_per_hour else 0 end) as morning_sales,
+sum(case when hour between 12 and 16 then revenue_per_hour else 0 end) as afternoon_sales,
+sum(case when hour between 17 and 22 then revenue_per_hour else 0 end) as evening_sales
+from base_table;
+
+-- Unnest, Running_totals and Correlated subquery
+
+with base_table as(
+select dollars,index 
+from unnest(generate_array(1,5)) dollars 
+with offset as index)
+
+select bt.*,
+(select sum(dollars) from base_table bt2
+where bt2.index<=bt.index) as running_total
+from base_table bt;
+
+-- LAG Function
+
+with base_table as(
+select dollars,index 
+from unnest(generate_array(1,5)) dollars 
+with offset as index)
+
+select * from(
+select *,dollars > LAG(dollars) over (order by index) as lag_value 
+from base_table)
+where lag_value;
+
+
+===============================================================================
+
+Colic Aid - for stomach
+Maxtra P - for dry cough
+Kufril LS - for heavy cough
+Livolin 0.3 mg - for cold(along with nebulizer)
+nasoclear - nose clear (for allergy)
+
+
+  
