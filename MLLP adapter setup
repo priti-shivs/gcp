@@ -1,0 +1,74 @@
+MLLP adapter setup and cloud HL7v2 store connection
+
+As you saw above in the Healthcare API Concepts, you need to use the Google Cloud MLLP Adapter. You will set it up as a local Docker container and connect it to the HL7v2 store.
+The MLLP adapter docker image has been built beforehand and staged in the cloud healthcare public registry. This image is used throughout the lab.
+1.	To run the setup_mllp_adapter.sh and create your MLLP adapter GKE cluster and HL7v2 store, issue the following command:
+docker pull gcr.io/cloud-healthcare-containers/mllp-adapter:latest
+
+This may take several minutes to complete.
+2.	When complete, there will be a banner displaying details of results:
+Status: Downloaded newer image for gcr.io/cloud-healthcare-containers/mllp-adapter:latest
+
+Testing.................................................................................
+The easiest way of testing the setup without exposing the server to public Internet is using port-forward command.
+1.	Run the following:
+docker run \
+    --network=host \
+    gcr.io/cloud-healthcare-containers/mllp-adapter \
+    /usr/mllp_adapter/mllp_adapter \
+    --hl7_v2_project_id=$PROJECT_ID \
+    --hl7_v2_location_id=$REGION \
+    --hl7_v2_dataset_id=$DATASET_ID \
+    --hl7_v2_store_id=$HL7_STORE_ID \
+    --export_stats=false \
+    --receiver_ip=127.0.0.1 \
+    --pubsub_project_id=$PROJECT_ID \
+    --pubsub_subscription=hl7_subscription \
+    --mllp_addr=127.0.0.1:2575 \
+    --logtostderr
+
+2.	Open a second Cloud Shell tab by clicking the + button next to the open terminal, then install NetCat:
+sudo apt install netcat
+
+3.	Type "y" when asked to confirm this action.
+4.	Still in the second shell, copy the hl7v2-mllp-sample.txt file to your local directory:
+curl https://cloud.google.com/healthcare-api/docs/resources/hl7v2-mllp-sample.txt --output hl7v2-mllp-sample.txt
+
+5.	In the same directory where you added the file, run the following command to start sending HL7v2 messages to your HL7v2 store:
+
+echo -n -e "\x0b$(cat hl7v2-mllp-sample.txt)\x1c\x0d" | nc localhost 2575
+
+The message will be sent through the MLLP adapter to your HL7v2 store. If the message was successfully ingested into the HL7v2 store, the command returns the following output:
+MSA|AA|20150503223000CILITY|FROM_APP|FROM_FACILITY|20190502181627||ACK|c1f613c8-cdc2-497f-b701-a71efc61bf0d|P|2.5
+
+6.	Navigate back to the first Cloud Shell tab and verify the message was sent by viewing the output. There should be lines for dialing, accepted, sending, and message was successfully sent.
+Note: You can safely ignore any handler errors.
+
+7.	Still on the first Cloud Shell tab, close the running Docker application with Ctrl + C.
+
+8.	List the messages in your HL7v2 store to ensure the message was added:
+curl -X GET \
+     -H "Authorization: Bearer "$(gcloud auth print-access-token) \
+     -H "Content-Type: application/json; charset=utf-8" \
+     "https://healthcare.googleapis.com/v1/projects/$PROJECT_ID/locations/$REGION/datasets/$DATASET_ID/hl7V2Stores/$HL7_STORE_ID/messages"
+
+It will output the following:
+{
+ "messages": [
+   "projects/qwiklabs-gcp-{ID}/locations/us-central1/datasets/dataset1/hl7V2Stores/hl7v2store1/messages/PTXYFyqOkHq_yF9ObrQvxNB0yXOpgaIjumFYNzPACMI="
+ ]
+}
+You've successfully sent a HL7v2 message to a Cloud Healthcare API datastore.
+
+
+Deploying the MLLP adapter to Google Kubernetes Engine
+
+In a production environment, when transmitting HL7v2 messages over MLLP from your care center, one possible configuration is to send the messages to an adapter that is deployed in Google Cloud and can forward them to the Cloud Healthcare API.
+The MLLP adapter runs as a stateless application on a GKE cluster. 
+A GKE cluster is a managed group of VM instances for running containerized applications. 
+Stateless applications are applications which do not store data or application state to the cluster or to persistent storage. Instead, data and application state stay with the client, which makes stateless applications more scalable.
+GKE uses the Deployment controller to deploy stateless applications as uniform, non-unique Pods.
+Deployments manage the desired state of your application: how many Pods should run your application, what version of the container image should run, what the Pods should be labelled, and so on. The desired state can be changed dynamically through updates to the Deployment's Pod specification.
+
+At the same time that you deploy the adapter, you create a Service controller that allows you to connect the adapter to the Cloud Healthcare API using internal load balancing.
+
